@@ -1,0 +1,129 @@
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.preprocessing import MinMaxScaler
+
+
+class Benchmark_ranking(object):
+    
+    """This class takes a dataframe with categories as index and different values (numeric) as columns 
+    and then ranks and visualizes them. """
+    
+   
+    
+    def __init__(self,df, score = 'Additive',benchmark = 'Benchmark', show_me = 'Benchmark',*chart_params, **weights):
+        
+        #base df -> just to initualize this doesnt do anything
+        
+        self.object_df = df 
+        
+        #you can change the score from Additive to Multiplicative to enchance any potential score differences and enable compensation
+        self.score = score
+
+        
+        #check whether the weights are correct -> default weights equal
+        def check_weights(weights): 
+            try:
+                if len(list(weights.values())[0]) == len(df_countries.columns):
+                    return list(weights.values())[0] 
+                else: 
+                    return [1]*int(len(df_countries.columns))
+            except IndexError:
+                return [1]*int(len(df_countries.columns))
+        
+        self.weights = check_weights(weights)
+        
+        def get_benchmark_df(df):
+    
+            # create an average of the columns and create a seperate df
+            df_mean = pd.DataFrame(df.mean().values).T
+            df_mean.columns = object_df.columns 
+
+            #name & append the benchmark row to the df
+            df_mean[object_df.index.name] = 'Benchmark'
+            df_mean.set_index(object_df.index.name, inplace= True)
+
+            benchmark_df = object_df.append(df_mean)
+            
+            return benchmark_df
+        
+        #df with benchmar base
+        self.benchmark_df = get_benchmark_df(self.object_df)
+        
+        
+        ranked_df = (self.benchmark_df * self.weights).rank(method='first',na_option='bottom') 
+
+        ranked_df['Additive_Score'] = ranked_df[object_df.columns].sum(axis=1).rank(method='first',na_option='bottom')
+        ranked_df['Multiplicative_Score'] = ranked_df[object_df.columns].prod(axis=1).rank(method='first',na_option='bottom')
+        
+        #ranked df with the rankings (for troubleshooting)
+        self.ranked_df = ranked_df
+        
+        def overview_graph(ranked_df):
+            
+            fig = px.bar(ranked_df.reset_index(drop=False).sort_values(f'{score}_Score', ascending=False), 
+             x= ranked_df.index.name , 
+             y= f'{score}_Score', 
+             color = f'{score}_Score')
+
+            fig.add_vline(x= ranked_df[f'{score}_Score'].max() - ranked_df.T.Benchmark[f'{score}_Score']
+                          , line_width=3, 
+                          line_dash="dash", 
+                          line_color="green")
+
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)')
+
+            fig.update_traces(marker_coloraxis=None)
+
+            return fig
+            
+        #visualize the bar    
+        self.Bar_show = overview_graph(ranked_df)
+        
+    def radar_chart(show_me,benchmark):
+        
+        r_score = df_scaled[df_scaled[benchmark_df.index.name] == show_me ][df_countries.columns].values.tolist()[0]
+        benchmark_values = benchmark_df[benchmark_df.index == benchmark].round(2).values.tolist()[0]
+        
+        categories = [str(col) + " : " + str(val) + f" vs ({str(bench)})  " for col, val, bench in zip(og_columns,corr_values,benchmark_values)]
+
+
+        fig = go.Figure()
+
+
+        fig.add_trace(go.Scatterpolar(
+              r= df_scaled[df_scaled[benchmark_df.index.name] == benchmark ][df_countries.columns].values.tolist()[0],
+              theta=categories,
+              fill='toself',
+              name= benchmark,
+            line_color = 'lightgrey',
+            fillcolor  = 'lightgrey',
+
+        ))
+
+
+        fig.add_trace(go.Scatterpolar(
+              r=r_score,
+              theta=categories,
+              fill='toself',
+              name=show_me,
+            line_color = 'lightgreen',
+             fillcolor  = 'lightgreen'
+        ))
+
+
+
+        fig.update_layout(
+          polar=dict(
+            radialaxis=dict(
+              visible=True,
+              range=[0, 11]
+            )),
+          showlegend=False
+        )
+
+        fig.update_layout(title=f"Comparison of {show_me} vs {benchmark}",title_x=0.5, )
+
+        fig.show()
+        
